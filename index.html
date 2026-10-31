@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Areeb's Bad Day</title>
+<style>
+  :root { --chip:rgba(20,16,50,.72); --chipText:#fff; --accent:#ffd23f; box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+  @media (prefers-color-scheme: dark) { :root { --chip:rgba(255,255,255,.14); } }
+  :root[data-theme="dark"] { --chip:rgba(255,255,255,.14); }
+  html, body { height:100%; margin:0; overflow:hidden; background:#4b3fa8; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; touch-action:none; user-select:none; -webkit-user-select:none; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; cursor:none; }
+  #top { position:fixed; top:calc(env(safe-area-inset-top,0px) + 10px); left:10px; right:10px; display:flex; gap:8px; align-items:center; pointer-events:none; }
+  .chip, button { background:var(--chip); color:var(--chipText); border:0; border-radius:999px; padding:8px 14px; font:700 .9rem system-ui,sans-serif; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); }
+  #bar { display:inline-block; width:90px; height:10px; border-radius:6px; background:rgba(255,255,255,.25); vertical-align:middle; margin-left:6px; overflow:hidden; }
+  #fill { display:block; height:100%; width:0; background:linear-gradient(90deg,#ffd23f,#ff4d4d); transition:width .15s; }
+  .sp { flex:1; }
+  button { cursor:pointer; pointer-events:auto; }
+  button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  #tools { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom,0px) + 12px); display:flex; gap:6px; max-width:calc(100% - 16px); padding:6px; overflow-x:auto; scrollbar-width:none; touch-action:pan-x; border-radius:22px; background:var(--chip); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+  #tools button { flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:2px; border-radius:16px; padding:8px 9px; min-width:54px; background:transparent; font-size:.68rem; font-weight:600; }
+  #tools button span { font-size:1.55rem; line-height:1; }
+  #tools button.on { background:var(--accent); color:#1c1c28; }
+  #tip { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom,0px) + 100px); color:#fff; font-weight:600; font-size:.9rem; text-shadow:0 2px 6px rgba(0,0,0,.5); pointer-events:none; text-align:center; width:90%; }
+  #intro { position:fixed; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(20,16,50,.7); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); --card:#fff; --ct:#1c1c28; --mt:#5f5a7a; }
+  @media (prefers-color-scheme: dark) { #intro { --card:#2a2540; --ct:#f4f1ff; --mt:#b9b3d6; } }
+  :root[data-theme="dark"] #intro { --card:#2a2540; --ct:#f4f1ff; --mt:#b9b3d6; }
+  #intro .box { background:var(--card); color:var(--ct); border-radius:22px; padding:28px 24px; max-width:380px; width:100%; text-align:center; box-shadow:0 24px 60px -12px rgba(0,0,0,.5); }
+  #intro .face { font-size:3rem; line-height:1; margin-bottom:12px; }
+  #intro p { margin:0 0 20px; font-size:1.15rem; line-height:1.5; font-weight:600; }
+  #intro button { pointer-events:auto; background:var(--accent); color:#1c1c28; font-size:1.05rem; padding:13px 34px; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="top">
+  <div class="chip">🪙 <b id="coins">0</b></div>
+  <div class="chip">Ouch<span id="bar"><i id="fill"></i></span></div>
+  <div class="sp"></div>
+  <button id="mute" type="button" aria-label="Sound">🔊</button>
+  <button id="reset" type="button">↺ Reset</button>
+</div>
+<div id="tip"></div>
+<div id="tools"></div>
+
+<div id="intro" role="dialog" aria-modal="true" aria-labelledby="introText">
+  <div class="box">
+    <div class="face" aria-hidden="true">🙁</div>
+    <p id="introText">Sorry for annoying you and making you mad. Here is a game for you when you are angry at me 🙁</p>
+    <button id="start" type="button">Play</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var W, H, S, FL, dpr;
+  var TOOLS = [
+    { id:'grab', e:'✋', n:'Grab', tip:'Drag Areeb and fling him around' },
+    { id:'punch', e:'👊', n:'Punch', tip:'Tap him to punch' },
+    { id:'bat', e:'🏏', n:'Bat', tip:'Tap to swing the bat' },
+    { id:'gun', e:'🔫', n:'Pistol', tip:'Tap to shoot' },
+    { id:'shot', e:'💥', n:'Shotgun', tip:'Tap to blast him' },
+    { id:'bomb', e:'💣', n:'Bomb', tip:'Tap to drop a bomb, then run!' },
+    { id:'kick', e:'🦶', n:'Kick', tip:'Tap to kick him into the air' },
+    { id:'hammer', e:'🔨', n:'Hammer', tip:'Tap to smash him into the floor' },
+    { id:'pan', e:'🍳', n:'Pan', tip:'Tap to bonk him with a frying pan' },
+    { id:'rocket', e:'🚀', n:'Rocket', tip:'Tap to fire a rocket' },
+    { id:'zap', e:'⚡', n:'Zap', tip:'Tap near him to electrocute him' },
+    { id:'piano', e:'🎹', n:'Piano', tip:'Tap to drop a piano from the sky' }
+  ];
+  var tool = TOOLS[0], coins = 0, pain = 0, stun = 0, stand = 1, hurtT = 0, frame = 0, shake = 0, flash = 0, sayCd = 0, mute = false;
+  var P = [], C = [], BONES = [], parts = [], pops = [], tracers = [], bombs = [], bubble = null;
+  var mx = 0, my = 0, mvx = 0, drag = -1, hasMouse = false, zapT = 0, rockets = [], pianos = [];
+  var LINES = ['Ouch!', 'Why me?!', 'Not again...', 'Please stop...', 'Owww!', 'What did I do?', '*sigh*', 'Not the face!'];
+
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    S = Math.max(.6, Math.min(1.25, Math.min(W / 520, H / 720)));
+    FL = H - Math.max(135, H * .2);
+  }
+  function reset() {
+    var cx = W / 2, hy = FL - 84 * S, o = [[0,-98],[0,-70],[0,0],[-10,-36],[-12,-4],[10,-36],[12,-4],[-6,40],[-8,80],[6,40],[8,80]];
+    P = o.map(function (v) { var x = cx + v[0] * S, y = hy + v[1] * S; return { x:x, y:y, px:x, py:y }; });
+    C = [[0,1,28,1],[1,2,70,1],[1,3,34,1],[3,4,34,1],[1,5,34,1],[5,6,34,1],[2,7,40,1],[7,8,40,1],[2,9,40,1],[9,10,40,1],
+         [0,2,98,.5],[7,9,14,.15],[2,8,80,.25],[2,10,80,.25],[3,5,20,.08]];
+    BONES = [[0,1],[1,2],[1,3],[3,4],[1,5],[5,6],[2,7],[7,8],[2,9],[9,10]];
+    pain = 0; stun = 0; stand = 1; bombs = []; rockets = []; pianos = []; zapT = 0; parts = []; pops = []; tracers = []; bubble = null; drag = -1;
+  }
+
+  /* ---------- sound ---------- */
+  var ac;
+  function snd(t) {
+    if (mute) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      var big = t === 'b', n = ac.sampleRate * (big ? .6 : .13), b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, big ? 2 : 3);
+      var s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = b; f.type = 'lowpass'; f.frequency.value = big ? 350 : t === 'g' ? 3200 : 800; g.gain.value = big ? .8 : .4;
+      s.connect(f); f.connect(g); g.connect(ac.destination); s.start();
+    } catch (e) {}
+  }
+
+  /* ---------- helpers ---------- */
+  function hit(p, dx, dy, f) { p.px -= dx * f; p.py -= dy * f; }
+  function sparks(x, y, n, col, sp) {
+    for (var i = 0; i < n; i++) { var a = Math.random() * 6.283, v = (1 + Math.random() * 4) * (sp || 1);
+      parts.push({ x:x, y:y, vx:Math.cos(a) * v, vy:Math.sin(a) * v - 1, l:20 + Math.random() * 20, c:col || '#ffd23f', s:2 + Math.random() * 3 }); }
+  }
+  function pop(w, x, y) { pops.push({ w:w, x:x, y:y, l:34, r:(Math.random() - .5) * .4 }); }
+  function hurt(f, x, y, word, sound) {
+    stun = Math.max(stun, Math.min(120, f * 5)); stand = 0; hurtT = 40;
+    pain = Math.min(100, pain + f * 1.2); coins += Math.max(1, Math.round(f / 3));
+    pop(word, x, y - 20 * S); snd(sound || 'h');
+    if (sayCd <= 0) { bubble = { t:LINES[Math.floor(Math.random() * LINES.length)], l:90 }; sayCd = 50; }
+  }
+  function pick(x, y, r) {
+    var best = null, bd = r;
+    BONES.forEach(function (c) {
+      var a = P[c[0]], b = P[c[1]], ex = b.x - a.x, ey = b.y - a.y, t = ((x - a.x) * ex + (y - a.y) * ey) / (ex * ex + ey * ey || 1);
+      t = Math.max(0, Math.min(1, t)); var qx = a.x + ex * t, qy = a.y + ey * t, d = Math.hypot(x - qx, y - qy);
+      if (d < bd) { bd = d; best = { a:a, b:b, t:t, x:qx, y:qy }; }
+    });
+    var h = P[0], dh = Math.hypot(x - h.x, y - h.y) - 18 * S;
+    if (dh < bd) best = { a:h, b:h, t:0, x:h.x, y:h.y };
+    return best;
+  }
+  function push(h, dx, dy, f) { hit(h.a, dx, dy, f * (1 - h.t)); hit(h.b, dx, dy, f * h.t); }
+
+  /* ---------- weapons ---------- */
+  function shoot(x, y, n, spread, force, word) {
+    var side = x < P[2].x ? 1 : -1, ox = side > 0 ? 0 : W, total = 0, hx = x, hy = y;
+    for (var i = 0; i < n; i++) {
+      var yy = y + (Math.random() - .5) * spread, xx = x + (Math.random() - .5) * spread * .6, h = pick(xx, yy, n > 1 ? 15 * S : 22 * S);
+      if (h) { push(h, side, -.12, force * (.8 + Math.random() * .4)); total += force; hx = h.x; hy = h.y; sparks(h.x, h.y, 6);
+        tracers.push({ x1:ox, y1:yy, x2:h.x, y2:h.y, l:6 }); }
+      else tracers.push({ x1:ox, y1:yy, x2:side > 0 ? W : 0, y2:yy, l:6 });
+    }
+    parts.push({ x:ox + side * 10, y:y, vx:0, vy:0, l:5, c:'#fff3a0', s:26 });
+    snd('g'); shake = Math.max(shake, n > 1 ? 7 : 3);
+    if (total) hurt(Math.min(40, total * (n > 1 ? .55 : 1)), hx, hy, word);
+  }
+  function melee(x, y, r, force, word, lift) {
+    var h = pick(x, y, r); if (!h) { snd('h'); return; }
+    var dir = Math.abs(mvx) > 4 ? Math.sign(mvx) : (x < P[2].x ? 1 : -1);
+    push(h, dir, -lift, force); sparks(h.x, h.y, 10, '#fff', 1.2); hurt(force, h.x, h.y, word); shake = Math.max(shake, 5);
+  }
+  function explode(b) {
+    var R = 240 * S, top = 0;
+    P.forEach(function (p) {
+      var dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
+      if (d < R) { var f = (1 - d / R) * 40; hit(p, dx / d, dy / d - .35, f); top = Math.max(top, f); }
+    });
+    for (var i = 0; i < 40; i++) sparks(b.x, b.y, 1, ['#ff9f1c', '#ff4d4d', '#ffd23f', '#555'][i % 4], 3.5);
+    parts.push({ x:b.x, y:b.y, vx:0, vy:0, l:12, c:'#fff3a0', s:R * .55 });
+    shake = 18; flash = 6; snd('b');
+    if (top > 2) hurt(top, b.x, b.y - 30 * S, 'BOOM!', 'b'); else pop('BOOM!', b.x, b.y - 30 * S);
+  }
+  function slam(x, y) {
+    var h = pick(x, y, 46 * S); if (!h) { snd('h'); return; }
+    push(h, 0, 1, 26); sparks(h.x, h.y, 12, '#fff', 1.3); hurt(26, h.x, h.y, 'SMASH!'); shake = Math.max(shake, 9);
+  }
+  function zap(x, y) {
+    if (!pick(x, y, 70 * S)) { snd('h'); return; }
+    zapT = 45; hurt(16, P[2].x, P[1].y, 'ZZAP!', 'g');
+  }
+  function rocket(x, y) {
+    var side = x < P[2].x ? 1 : -1; rockets.push({ x:side > 0 ? 0 : W, y:y, vx:side * 15, vy:0 }); snd('g');
+  }
+  function act(x, y) {
+    var id = tool.id;
+    if (id === 'punch') melee(x, y, 34 * S, 15, 'POW!', .25);
+    else if (id === 'bat') melee(x, y, 52 * S, 24, 'WHACK!', .35);
+    else if (id === 'gun') shoot(x, y, 1, 0, 17, 'BANG!');
+    else if (id === 'shot') shoot(x, y, 8, 70 * S, 11, 'BLAM!');
+    else if (id === 'bomb') bombs.push({ x:x, y:y, vx:(Math.random() - .5) * 3, vy:-2, t:90 });
+    else if (id === 'kick') melee(x, y, 42 * S, 26, 'KICK!', .95);
+    else if (id === 'pan') melee(x, y, 40 * S, 13, 'BONK!', .1);
+    else if (id === 'hammer') slam(x, y);
+    else if (id === 'zap') zap(x, y);
+    else if (id === 'rocket') rocket(x, y);
+    else if (id === 'piano') pianos.push({ x:x, y:-60, vy:0 });
+  }
+
+  /* ---------- physics ---------- */
+  function solve(c) {
+    var a = P[c[0]], b = P[c[1]], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, df = (d - c[2] * S) / d * c[3] * .5;
+    a.x += dx * df; a.y += dy * df; b.x -= dx * df; b.y -= dy * df;
+  }
+  function bounds() {
+    for (var i = 0; i < P.length; i++) {
+      var p = P[i], r = (i === 0 ? 18 : 4) * S, vy = p.y - p.py;
+      if (p.y > FL - r) {
+        p.y = FL - r; p.py = p.y + vy * .22; p.px = p.x - (p.x - p.px) * .7;
+        if (vy > 9 && frame % 3 === 0) { sparks(p.x, FL, 4, '#e9d8c4', .6); if (vy > 14) { snd('h'); shake = Math.max(shake, 4); } }
+      }
+      if (p.y < r) { p.y = r; p.py = p.y; }
+      if (p.x < r) { p.px = r + (p.px - p.x) * -.4; p.x = r; }
+      if (p.x > W - r) { p.px = W - r + (p.px - p.x) * -.4; p.x = W - r; }
+    }
+  }
+  function balance() {
+    if (stun > 0 || drag >= 0) return;
+    var b = Math.min(1, stand), hip = P[2], onFloor = P[8].y > FL - 14 * S || P[10].y > FL - 14 * S;
+    if (onFloor) hip.y += (FL - 84 * S - hip.y) * .05 * b;
+    P[0].y += (hip.y - 96 * S - P[0].y) * .07 * b; P[0].x += (hip.x + 3 * S - P[0].x) * .08 * b;
+    P[1].x += (hip.x - P[1].x) * .08 * b;
+    if (onFloor) { P[8].x += (hip.x - 10 * S - P[8].x) * .06 * b; P[10].x += (hip.x + 10 * S - P[10].x) * .06 * b; }
+  }
+  function step() {
+    frame++; var g = .55 * S;
+    P.forEach(function (p) { var vx = (p.x - p.px) * .993, vy = (p.y - p.py) * .993; p.px = p.x; p.py = p.y; p.x += vx; p.y += vy + g; });
+    if (drag >= 0) { var q = P[drag]; q.x += (mx - q.x) * .4; q.y += (my - q.y) * .4; stun = Math.max(stun, 25); stand = 0; }
+    balance();
+    for (var it = 0; it < 10; it++) { C.forEach(solve); bounds(); }
+    if (stun > 0) stun--; else stand = Math.min(1, stand + .015);
+    if (hurtT > 0) hurtT--; if (sayCd > 0) sayCd--;
+    pain = Math.max(0, pain - .04); mvx *= .8;
+    bombs.forEach(function (b) {
+      b.vy += .5 * S; b.x += b.vx; b.y += b.vy; b.t--;
+      if (b.y > FL - 12 * S) { b.y = FL - 12 * S; b.vy *= -.45; b.vx *= .8; }
+      if (b.x < 12 || b.x > W - 12) b.vx *= -.6;
+      if (b.t <= 0) { b.dead = true; explode(b); }
+    });
+    bombs = bombs.filter(function (b) { return !b.dead; });
+    if (zapT > 0) { zapT--; stun = Math.max(stun, 20); P.forEach(function (p) { hit(p, Math.random() - .5, Math.random() - .5, 3.2); }); if (frame % 3 === 0) sparks(P[2].x + (Math.random() - .5) * 60 * S, P[2].y - Math.random() * 90 * S, 2, '#7df9ff', 1.5); }
+    rockets.forEach(function (r) {
+      r.x += r.vx; r.y += r.vy; sparks(r.x - Math.sign(r.vx) * 12, r.y, 1, '#ffb13b', .6);
+      if (pick(r.x, r.y, 20 * S) || r.y > FL || r.x < -40 || r.x > W + 40) { r.dead = true; if (r.x > -20 && r.x < W + 20) explode(r); }
+    });
+    rockets = rockets.filter(function (r) { return !r.dead; });
+    pianos.forEach(function (a) {
+      a.vy = Math.min(22 * S, a.vy + 1.1 * S); a.y += a.vy; var h = pick(a.x, a.y + 14 * S, 34 * S);
+      if (h && a.vy > 3) { push(h, 0, 1, 32); hurt(32, h.x, h.y - 20 * S, 'CRASH!', 'b'); sparks(a.x, a.y, 14, '#fff', 1.5); shake = 14; a.dead = true; }
+      else if (a.y > FL - 20 * S) { a.dead = true; sparks(a.x, FL, 10, '#e9d8c4', 1); snd('h'); shake = 6; }
+    });
+    pianos = pianos.filter(function (a) { return !a.dead; });
+    parts.forEach(function (p) { p.x += p.vx; p.y += p.vy; p.vy += .12; p.l--; });
+    parts = parts.filter(function (p) { return p.l > 0; });
+    pops.forEach(function (p) { p.l--; p.y -= .6; }); pops = pops.filter(function (p) { return p.l > 0; });
+    tracers.forEach(function (t) { t.l--; }); tracers = tracers.filter(function (t) { return t.l > 0; });
+    if (bubble && --bubble.l <= 0) bubble = null;
+    if (shake > 0) shake *= .88; if (flash > 0) flash--;
+  }
+
+  /* ---------- drawing ---------- */
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function room() {
+    var g = ctx.createLinearGradient(0, 0, 0, FL); g.addColorStop(0, '#5a4bc4'); g.addColorStop(1, '#8c7df0');
+    ctx.fillStyle = g; ctx.fillRect(-30, -30, W + 60, FL + 30);
+    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 14;
+    for (var x = 20; x < W; x += 56) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, FL); ctx.stroke(); }
+    var wx = W * .12, wy = FL * .12, ww = Math.min(150, W * .28), wh = ww * .85, sk = ctx.createLinearGradient(0, wy, 0, wy + wh);
+    sk.addColorStop(0, '#2c2a6b'); sk.addColorStop(1, '#f6a96b');
+    ctx.fillStyle = sk; rr(wx, wy, ww, wh, 8); ctx.fill(); ctx.strokeStyle = '#f4ecff'; ctx.lineWidth = 6; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx + ww / 2, wy); ctx.lineTo(wx + ww / 2, wy + wh); ctx.moveTo(wx, wy + wh / 2); ctx.lineTo(wx + ww, wy + wh / 2); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(wx + ww * .75, wy + wh * .2, 6, 0, 7); ctx.fill();
+    var fg = ctx.createLinearGradient(0, FL, 0, H); fg.addColorStop(0, '#d9955f'); fg.addColorStop(1, '#a86a3c');
+    ctx.fillStyle = fg; ctx.fillRect(-30, FL, W + 60, H - FL + 30);
+    ctx.fillStyle = '#f4ecff'; ctx.fillRect(-30, FL - 8, W + 60, 10);
+    ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 2;
+    for (var y = FL + 28; y < H; y += 34) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  }
+  function face(h) {
+    var ang = Math.atan2(h.x - P[1].x, P[1].y - h.y);
+    ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(ang);
+    ctx.strokeStyle = ctx.fillStyle = '#14141f'; ctx.lineWidth = 2.2 * S; ctx.lineCap = 'round';
+    var hu = hurtT > 0;
+    ctx.beginPath();
+    ctx.moveTo(-11 * S, -4 * S); ctx.lineTo(-3 * S, -8 * S); ctx.moveTo(11 * S, -4 * S); ctx.lineTo(3 * S, -8 * S); ctx.stroke();
+    if (hu) {
+      ctx.beginPath();
+      [-6, 6].forEach(function (x) { ctx.moveTo((x - 3) * S, 1 * S); ctx.lineTo((x + 3) * S, 7 * S); ctx.moveTo((x + 3) * S, 1 * S); ctx.lineTo((x - 3) * S, 7 * S); });
+      ctx.stroke(); ctx.beginPath(); ctx.ellipse(0, 12 * S, 3.5 * S, 4.5 * S, 0, 0, 7); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(-6 * S, 0, 2.4 * S, 0, 7); ctx.arc(6 * S, 0, 2.4 * S, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 12 * S, 5 * S, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      var t = frame % 170; if (t < 60) { ctx.fillStyle = '#4db8ff'; ctx.beginPath(); ctx.arc(-7 * S, (4 + t / 60 * 12) * S, 2 * S, 0, 7); ctx.fill(); }
+    }
+    ctx.restore();
+  }
+  function bubbleDraw(h) {
+    ctx.font = '700 ' + 14 * S + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var ty = h.y - 52 * S; ctx.fillStyle = 'rgba(20,16,50,.65)'; var w = ctx.measureText('Areeb').width + 18 * S; rr(h.x - w / 2, ty - 11 * S, w, 22 * S, 11 * S); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText('Areeb', h.x, ty + 1);
+    if (bubble) {
+      var tw = ctx.measureText(bubble.t).width + 22 * S, bx = Math.max(tw / 2 + 6, Math.min(W - tw / 2 - 6, h.x)), by = ty - 38 * S;
+      ctx.fillStyle = '#fff'; rr(bx - tw / 2, by - 15 * S, tw, 30 * S, 14 * S); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(h.x - 6 * S, by + 14 * S); ctx.lineTo(h.x, by + 24 * S); ctx.lineTo(h.x + 7 * S, by + 14 * S); ctx.fill();
+      ctx.fillStyle = '#1c1c28'; ctx.fillText(bubble.t, bx, by + 1);
+    }
+  }
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, (Math.random() - .5) * shake * dpr, (Math.random() - .5) * shake * dpr);
+    room();
+    var hip = P[2], air = Math.max(0, Math.min(1, (FL - hip.y - 84 * S) / (200 * S)));
+    ctx.fillStyle = 'rgba(0,0,0,' + (.28 - air * .15) + ')'; ctx.beginPath(); ctx.ellipse(hip.x, FL + 4, 46 * S * (1 - air * .4), 7 * S, 0, 0, 7); ctx.fill();
+    ctx.lineCap = ctx.lineJoin = 'round'; ctx.strokeStyle = '#14141f'; ctx.lineWidth = 7 * S;
+    ctx.beginPath();
+    [[2,7,8],[2,9,10],[1,3,4],[1,5,6]].forEach(function (l) { ctx.moveTo(P[l[0]].x, P[l[0]].y); ctx.lineTo(P[l[1]].x, P[l[1]].y); ctx.lineTo(P[l[2]].x, P[l[2]].y); });
+    ctx.moveTo(P[1].x, P[1].y); ctx.lineTo(P[2].x, P[2].y); ctx.stroke();
+    var h = P[0]; ctx.fillStyle = '#fff3e0'; ctx.lineWidth = 5 * S; ctx.beginPath(); ctx.arc(h.x, h.y, 18 * S, 0, 7); ctx.fill(); ctx.stroke();
+    face(h);
+    if (stun > 15) { ctx.font = 16 * S + 'px system-ui'; ctx.fillStyle = '#ffd23f'; for (var i = 0; i < 3; i++) { var a = frame * .12 + i * 2.1; ctx.fillText('★', h.x + Math.cos(a) * 26 * S, h.y - 24 * S + Math.sin(a) * 7 * S); } }
+    bubbleDraw(h);
+    if (zapT > 0) { ctx.strokeStyle = '#7df9ff'; ctx.lineWidth = 3; ctx.beginPath(); var zx = P[2].x + (Math.random() - .5) * 20; ctx.moveTo(zx, 0); for (var k = 1; k <= 8; k++) ctx.lineTo(zx + (Math.random() - .5) * 50 * S, k * (P[1].y / 8)); ctx.stroke(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    rockets.forEach(function (r) { ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(Math.atan2(r.vy, r.vx) + Math.PI / 4); ctx.font = 34 * S + 'px system-ui'; ctx.fillText('🚀', 0, 0); ctx.restore(); });
+    pianos.forEach(function (a) { ctx.font = 62 * S + 'px system-ui'; ctx.fillText('🎹', a.x, a.y); });
+    bombs.forEach(function (b) {
+      ctx.fillStyle = '#1c1c28'; ctx.beginPath(); ctx.arc(b.x, b.y, 12 * S, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, 17 * S, -1.57, -1.57 + 6.283 * b.t / 90); ctx.stroke();
+      if (frame % 6 < 3) { ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.arc(b.x + 7 * S, b.y - 13 * S, 3 * S, 0, 7); ctx.fill(); }
+    });
+    tracers.forEach(function (t) { ctx.strokeStyle = 'rgba(255,243,160,' + t.l / 6 + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke(); });
+    parts.forEach(function (p) { ctx.globalAlpha = Math.min(1, p.l / 12); ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, 7); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    pops.forEach(function (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); var sc = 1 + Math.max(0, p.l - 28) * .06; ctx.scale(sc, sc); ctx.globalAlpha = Math.min(1, p.l / 12);
+      ctx.font = 'italic 900 ' + 30 * S + 'px Impact,system-ui,sans-serif'; ctx.lineWidth = 6; ctx.strokeStyle = '#1c1c28'; ctx.strokeText(p.w, 0, 0); ctx.fillStyle = '#ffd23f'; ctx.fillText(p.w, 0, 0); ctx.restore(); });
+    if (hasMouse && drag < 0) { ctx.font = 30 * S + 'px system-ui'; ctx.fillText(tool.e, mx, my); }
+    if (flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + flash / 8 + ')'; ctx.fillRect(0, 0, W, H); }
+    document.getElementById('coins').textContent = coins; document.getElementById('fill').style.width = pain + '%';
+  }
+
+  /* ---------- input ---------- */
+  function pos(e) { return { x:e.clientX, y:e.clientY }; }
+  cv.addEventListener('pointerdown', function (e) {
+    var q = pos(e); mx = q.x; my = q.y; hasMouse = e.pointerType === 'mouse'; cv.setPointerCapture(e.pointerId);
+    if (ac && ac.state === 'suspended') ac.resume();
+    if (tool.id === 'grab') {
+      var bi = -1, bd = 50 * S; P.forEach(function (p, i) { var d = Math.hypot(p.x - mx, p.y - my); if (d < bd) { bd = d; bi = i; } }); drag = bi;
+      if (bi >= 0) snd('h');
+    } else act(mx, my);
+  });
+  cv.addEventListener('pointermove', function (e) { var q = pos(e); mvx = q.x - mx; mx = q.x; my = q.y; hasMouse = e.pointerType === 'mouse'; });
+  function up() { drag = -1; }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hasMouse = false; });
+
+  var tb = document.getElementById('tools'), tip = document.getElementById('tip');
+  TOOLS.forEach(function (t) {
+    var b = document.createElement('button'); b.type = 'button'; b.innerHTML = '<span>' + t.e + '</span>' + t.n;
+    b.onclick = function () { tool = t; tip.textContent = t.tip; Array.prototype.forEach.call(tb.children, function (c) { c.classList.remove('on'); }); b.classList.add('on'); };
+    tb.appendChild(b);
+  });
+  tb.children[0].onclick();
+  document.getElementById('reset').onclick = reset;
+  document.getElementById('mute').onclick = function () { mute = !mute; this.textContent = mute ? '🔇' : '🔊'; };
+  window.addEventListener('resize', size);
+
+  document.getElementById('start').onclick = function () { document.getElementById('intro').style.display = 'none'; };
+  document.getElementById('start').focus();
+  size(); reset();
+  var last = performance.now(), acc = 0;
+  (function loop(t) {
+    acc += Math.min(50, t - last); last = t;
+    while (acc >= 16.67) { step(); acc -= 16.67; }
+    draw(); requestAnimationFrame(loop);
+  })(last);
+})();
+</script>
+</body>
+</html>
